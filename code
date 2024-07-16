@@ -1,0 +1,83 @@
+## Exploratory Data Analysis
+## Total EVs
+import pandas as pd
+import numpy as np
+from sklearn.impute import KNNImputer
+import matplotlib.pyplot as plt
+
+# Loading data
+file_path = 'https://github.com/trangng99/repository/blob/main/Total EV in California.xlsx'
+
+# Read data from sheet "County"
+df5 = pd.read_excel(file_path, sheet_name='County')
+
+num_rows = len(df5)
+null_counts = df5.isnull().sum()
+print(null_counts)
+
+# Filter the data by the values 'Electric' in the 'FUEL_TYPE' column
+filtered_df5 = df5[df5['FUEL_TYPE'].isin(['Electric'])]
+
+# Exclude rows with the year 2024
+cleaned_df5 = filtered_df5[filtered_df5['Data_Year'] != 2024]
+
+# Keep only 'Data_Year', 'Quarter', and 'Number of Vehicles' columns
+final5 = cleaned_df5[['Data_Year', 'Quarter', 'Number of Vehicles']]
+
+# Exclude data between 1998 and 2009
+final5 = final5[(final5['Data_Year'] < 1998) | (final5['Data_Year'] > 2009)]
+
+# Resetting index after filtering
+final5 = final5.reset_index(drop=True)
+
+# Replace quarter values with numeric values
+final5['Quarter'] = final5['Quarter'].replace({'Q4': 4, 'Q3': 3, 'Q2': 2, 'Q1': 1})
+
+# Create a copy to avoid modifying the original DataFrame
+df_imputed = final5[['Data_Year', 'Quarter', 'Number of Vehicles']].copy()
+
+# Identify rows with missing 'Quarter' values
+missing_quarter_indices = df_imputed[df_imputed['Quarter'].isna()].index
+
+# Define features for KNN Imputer
+features = ['Number of Vehicles', 'Data_Year']
+feature_matrix = df_imputed[features].values
+
+# Use the KNN Imputer
+imputer = KNNImputer(n_neighbors=5)
+imputed_matrix = imputer.fit_transform(df_imputed)
+
+# Update the DataFrame with imputed 'Quarter' values
+df_imputed.loc[missing_quarter_indices, 'Quarter'] = imputed_matrix[missing_quarter_indices, df_imputed.columns.get_loc('Quarter')]
+
+# Verify lengths
+print(len(missing_quarter_indices))
+print(len(df_imputed.loc[missing_quarter_indices, 'Quarter']))
+
+# Plot the results
+plt.scatter(missing_quarter_indices, df_imputed.loc[missing_quarter_indices, 'Quarter'], color='red', label='KNN Imputation')
+plt.title('Number of Vehicles with KNN Imputation')
+plt.xlabel('Time')
+plt.ylabel('Quarter')
+plt.legend()
+plt.show()
+
+# Round and replace the numeric quarter values back to string format
+df_imputed['Quarter'] = round(df_imputed['Quarter'], 0)
+df_imputed['Quarter'] = df_imputed['Quarter'].replace({4: 'Q4', 3: 'Q3', 2: 'Q2', 1: 'Q1'})
+
+# Sum the 'Number of Vehicles' for each 'Data_Year' and 'Quarter' combination
+df_imputed = df_imputed.groupby(['Data_Year', 'Quarter'])['Number of Vehicles'].sum().reset_index()
+
+# Create a MultiIndex DataFrame with all combinations of years and quarters
+years = df_imputed['Data_Year'].unique()
+quarters = ['Q1', 'Q2', 'Q3', 'Q4']
+full_index = pd.MultiIndex.from_product([years, quarters], names=['Data_Year', 'Quarter'])
+
+# Set the index of the imputed DataFrame and reindex with the full index
+df_imputed.set_index(['Data_Year', 'Quarter'], inplace=True)
+quarterly_ev_totals = df_imputed.reindex(full_index, fill_value=0).reset_index()
+
+# Display the quarterly totals
+print(quarterly_ev_totals)
+
